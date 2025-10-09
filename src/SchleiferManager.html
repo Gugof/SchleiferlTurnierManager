@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>🎾 Schleiferlturnier</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-6" x-data="tournamentApp">
+
+<!-- Navigation -->
+<div class="flex flex-wrap gap-4 mb-6 justify-center">
+  <button @click="tab='players'" :class="tab==='players' ? activeTab : inactiveTab">Spieler</button>
+  <button @click="tab='rounds'" :class="tab==='rounds' ? activeTab : inactiveTab">Runden</button>
+  <button @click="tab='ranking'" :class="tab==='ranking' ? activeTab : inactiveTab">Rangliste</button>
+</div>
+
+<!-- Player Tab -->
+<div x-show="tab==='players'" class="w-full max-w-xl">
+  <h2 class="text-xl font-bold mb-4">👥 Spieler</h2>
+  <div class="mb-4 text-gray-700">
+    Gesamt: <span x-text="players.length"></span> Spieler  
+    (Männer: <span x-text="players.filter(p=>p.gender==='m').length"></span>,  
+    Frauen: <span x-text="players.filter(p=>p.gender==='w').length"></span>)
+  </div>
+
+  <div class="flex gap-2 mb-4 flex-wrap">
+    <input type="text" x-model="newName" placeholder="Name" class="border p-2 rounded flex-grow min-w-[120px]">
+    <div class="flex gap-1">
+      <button @click="newGender='m'" :class="newGender==='m' ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-blue-300'" class="px-3 py-2 rounded">M</button>
+      <button @click="newGender='w'" :class="newGender==='w' ? 'bg-pink-500 text-white' : 'bg-gray-200 hover:bg-pink-300'" class="px-3 py-2 rounded">W</button>
+    </div>
+    <button @click="addPlayer" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">+</button>
+  </div>
+
+  <h3 class="font-semibold mb-2">Männlein</h3>
+  <ul>
+    <template x-for="(p, index) in players.filter(p=>p.gender==='m')" :key="p.id">
+      <li class="bg-white p-3 rounded shadow mb-2 flex justify-between items-center hover:bg-gray-50 transition">
+        <span><b x-text="index+1"></b>. <span x-text="p.name"></span></span>
+        <button @click="removePlayerByName(p.name)" class="text-red-500 hover:text-red-700">❌</button>
+      </li>
+    </template>
+  </ul>
+
+  <h3 class="font-semibold mt-4 mb-2">Fraulein</h3>
+  <ul>
+    <template x-for="(p, index) in players.filter(p=>p.gender==='w')" :key="p.id">
+      <li class="bg-white p-3 rounded shadow mb-2 flex justify-between items-center hover:bg-gray-50 transition">
+        <span><b x-text="index+1"></b>. <span x-text="p.name"></span></span>
+        <button @click="removePlayerByName(p.name)" class="text-red-500 hover:text-red-700">❌</button>
+      </li>
+    </template>
+  </ul>
+
+  <button @click="resetAll" class="bg-red-500 text-white px-4 py-2 rounded mt-4 hover:bg-red-600">Alles löschen</button>
+</div>
+
+<!-- Round Tab -->
+<div x-show="tab==='rounds'" class="w-full max-w-4xl">
+  <h2 class="text-xl font-bold mb-4">🎾 Runden</h2>
+
+  <div class="flex flex-wrap gap-4 mb-6 items-end">
+    <div>
+      <label class="block text-sm font-semibold">Plätze</label>
+      <input type="number" x-model.number="fields" min="1" class="border rounded p-1 w-20 text-center">
+    </div>
+    <button @click="generateRound" class="bg-green-500 text-white px-4 py-2 rounded h-10 hover:bg-green-600">Neue Runde erzeugen</button>
+  </div>
+
+  <template x-for="(round, rIndex) in rounds" :key="rIndex">
+    <div class="mb-8 border rounded p-4 bg-white shadow-md hover:shadow-lg transition">
+
+      <div class="flex justify-between items-center mb-3 flex-wrap">
+        <h3 class="font-semibold text-lg">Runde <span x-text="rIndex+1"></span></h3>
+        <button @click="deleteRound(rIndex)" class="text-red-500 hover:text-red-700 mt-2 sm:mt-0">❌</button>
+      </div>
+
+      <ul class="space-y-4">
+        <template x-for="(match, mIndex) in round.matches.filter(m=>m.team2)" :key="mIndex">
+          <li class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3 rounded shadow transition items-center">
+
+            <!-- Team 1 -->
+            <div class="flex flex-col items-center gap-2"
+                 :class="match.winner === 'team1' ? 'bg-green-300 rounded p-2' : match.winner === 'team2' ? 'bg-red-200 rounded p-2' : ''">
+              <div class="flex gap-2 flex-wrap justify-center">
+                <template x-for="slot in ['player1','player2']" :key="match.team1[slot]">
+                  <div class="player p-2 rounded cursor-move transition min-w-[60px] text-center"
+                       :class="match.winner === null ? 'bg-blue-200 hover:bg-blue-300' : ''"
+                       :draggable="true"
+                       @dragstart="draggingPlayer = match.team1[slot]"
+                       @dragover.prevent
+                       @drop="swapPlayers(draggingPlayer, match.team1[slot], round)">
+                    <span x-text="getPlayerNameById(match.team1[slot])"></span>
+                  </div>
+                </template>
+              </div>
+              <button @click="setWinner(match,'team1')" class="mt-2 px-3 py-1 rounded text-white"
+                      :class="match.winner === 'team1' ? 'bg-green-600' : match.winner === 'team2' ? 'bg-gray-400' : 'bg-green-500'">
+                🏆 Sieger
+              </button>
+            </div>
+
+            
+            <div class="flex flex-col items-center text-center font-bold text-gray-600 py-2">
+              <div>Platz <span x-text="mIndex+1"></span></div> 
+             <span>vs</span>
+            </div>
+
+            <!-- Team 2 -->
+            <div class="flex flex-col items-center gap-2"
+                 :class="match.winner === 'team2' ? 'bg-green-300 rounded p-2' : match.winner === 'team1' ? 'bg-red-200 rounded p-2' : ''">
+              <div class="flex gap-2 flex-wrap justify-center">
+                <template x-for="slot in ['player1','player2']" :key="match.team2[slot]">
+                  <div class="player p-2 rounded cursor-move transition min-w-[60px] text-center"
+                       :class="match.winner === null ? 'bg-pink-200 hover:bg-pink-300' : ''"
+                       :draggable="true"
+                       @dragstart="draggingPlayer = match.team2[slot]"
+                       @dragover.prevent
+                       @drop="swapPlayers(draggingPlayer, match.team2[slot], round)">
+                    <span x-text="getPlayerNameById(match.team2[slot])"></span>
+                  </div>
+                </template>
+              </div>
+              <button @click="setWinner(match,'team2')" class="mt-2 px-3 py-1 rounded text-white"
+                      :class="match.winner === 'team2' ? 'bg-green-600' : match.winner === 'team1' ? 'bg-gray-400' : 'bg-green-500'">
+                🏆 Sieger
+              </button>
+            </div>
+          </li>
+        </template>
+      </ul>
+
+      <!-- Bye-Player -->
+      <div class="mt-5 border-t pt-3">
+        <h4 class="font-semibold mb-2">Ausetzer-Spieler</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+          <template x-for="match in round.matches.filter(m=>!m.team2)" :key="match.team1.player1">
+            <div class="player bg-yellow-300 p-3 rounded shadow text-center hover:bg-yellow-400 transition"
+                 :draggable="true"
+                 @dragstart="draggingPlayer = match.team1.player1"
+                 @dragover.prevent
+                 @drop="swapPlayers(draggingPlayer, match.team1.player1, round)">
+              <span x-text="getPlayerNameById(match.team1.player1)"></span>
+              <div class="text-xs mt-1 text-gray-700">Ausetzer</div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+    </div>
+  </template>
+</div>
+
+<!-- Ranking Tab -->
+<div x-show="tab==='ranking'" class="w-full max-w-xl">
+  <h2 class="text-xl font-bold mb-4">🏆 Rangliste</h2>
+
+  <h3 class="font-semibold mb-2">Männer</h3>
+  <table class="w-full bg-white shadow rounded mb-6">
+    <thead>
+      <tr class="bg-gray-200 text-left">
+        <th class="p-2">Name</th>
+        <th class="p-2">Spiele</th>
+        <th class="p-2">Schleiferln</th>
+        <th class="p-2">Ausetzer</th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="p in playersSorted.filter(p=>p.gender==='m')" :key="p.id">
+        <tr>
+          <td class="p-2" x-text="p.name"></td>
+          <td class="p-2" x-text="p.matches"></td>
+          <td class="p-2" x-text="p.points"></td>
+          <td class="p-2" x-text="p.bye"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+
+  <h3 class="font-semibold mb-2">Frauen</h3>
+  <table class="w-full bg-white shadow rounded">
+    <thead>
+      <tr class="bg-gray-200 text-left">
+        <th class="p-2">Name</th>
+        <th class="p-2">Spiele</th>
+        <th class="p-2">Schleiferln</th>
+        <th class="p-2">Ausetzer</th>
+      </tr>
+    </thead>
+    <tbody>
+      <template x-for="p in playersSorted.filter(p=>p.gender==='w')" :key="p.id">
+        <tr>
+          <td class="p-2" x-text="p.name"></td>
+          <td class="p-2" x-text="p.matches"></td>
+          <td class="p-2" x-text="p.points"></td>
+          <td class="p-2" x-text="p.bye"></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('tournamentApp', () => ({
+    tab: 'players',
+    newName: '',
+    newGender: 'm',
+    players: [],
+    rounds: [],
+    draggingPlayer: null,
+    activeTab: "bg-blue-500 text-white px-4 py-2 rounded",
+    inactiveTab: "bg-gray-300 text-black px-4 py-2 rounded",
+    fields: 3,
+
+    init() {
+      const saved = localStorage.getItem('tournamentData');
+      if (saved) {
+        const data = JSON.parse(saved);
+        this.players = data.players || [];
+        this.rounds = data.rounds || [];
+        this.fields = data.fields || 3;
+      }
+    },
+
+    saveData() {
+      localStorage.setItem('tournamentData', JSON.stringify({
+        players: this.players,
+        rounds: this.rounds,
+        fields: this.fields
+      }));
+    },
+
+    addPlayer() {
+      const name = this.newName.trim();
+      if (!name) return;
+      this.players.push({
+        id: Date.now().toString(),
+        name,
+        gender: this.newGender,
+        points: 0,
+        matches: 0,
+        bye: 0
+      });
+      this.newName = '';
+      this.saveData();
+    },
+
+    removePlayerByName(name) {
+      this.players = this.players.filter(p => p.name !== name);
+      this.saveData();
+    },
+
+    resetAll() {
+      if (confirm("Alles löschen?")) {
+        this.players = [];
+        this.rounds = [];
+        localStorage.removeItem('tournamentData');
+      }
+    },
+
+    deleteRound(index) {
+      this.rounds.splice(index, 1);
+      this.recalculatePoints();
+      this.saveData();
+    },
+
+    getPlayerNameById(id) {
+      const p = this.players.find(p => p.id === id);
+      return p ? p.name : 'Bye';
+    },
+
+    swapPlayers(id1, id2, round) {
+      for (let match of round.matches) {
+        for (let team of ['team1', 'team2']) {
+          if (!match[team]) continue;
+          for (let slot of ['player1', 'player2']) {
+            if (match[team][slot] === id1) match[team][slot] = id2;
+            else if (match[team][slot] === id2) match[team][slot] = id1;
+          }
+        }
+      }
+      this.saveData();
+    },
+
+    generateRound() {
+      if (this.players.length < 4) {
+        alert("Mindestens 4 Spieler nötig!");
+        return;
+      }
+    
+      const maxPlayers = this.fields * 4;
+      const totalPlayers = this.players.length;
+      const byeCount = totalPlayers - maxPlayers;
+    
+      const minBye = Math.min(...this.players.map(p => p.bye));
+      let byePlayers = this.players.filter(p => p.bye === minBye);
+      let roundPlayers = this.players.filter(p => p.bye != minBye);
+    
+      // Shuffle-function
+      function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+      }
+    
+      // Shuffle of bye players
+      shuffle(byePlayers);
+    
+      // Number of players moved to the round
+      const toMove = byePlayers.length - byeCount;
+    
+      // Move the first “toMove” players to roundPlayers
+      if (toMove > 0) {
+        const movedPlayers = byePlayers.splice(0, toMove);
+        roundPlayers.push(...movedPlayers);
+      }
+    
+      const finalbyePlayers = byePlayers.map(p => p.name);
+    
+      // Sorting genders for team logic
+      const males = roundPlayers.filter(p => p.gender === "m");
+      const females = roundPlayers.filter(p => p.gender === "w");
+      const teams = [];
+    
+      // Prefer mixed teams
+      while (males.length && females.length) {
+        teams.push({ player1: males.pop().id, player2: females.pop().id });
+      }
+    
+      // Remaining single or same-gender teams
+      const remaining = males.concat(females);
+      while (remaining.length >= 2) {
+        teams.push({ player1: remaining.pop().id, player2: remaining.pop().id });
+      }
+    
+      // Generate matches
+      const matches = [];
+      for (let i = 0; i < teams.length; i += 2) {
+        if (i + 1 < teams.length) {
+          matches.push({ team1: teams[i], team2: teams[i + 1], winner: null });
+        } else {
+          matches.push({ team1: teams[i], team2: null, winner: null });
+        }
+      }
+    
+      // add bye players
+      byePlayers.forEach(p =>
+        matches.push({ team1: { player1: p.id, player2: null }, team2: null, winner: null })
+      );
+    
+      this.rounds.push({ matches });
+      this.saveData();
+    },
+
+    setWinner(match, team) {
+      match.winner = team;
+      this.recalculatePoints();
+      this.saveData();
+    },
+
+    recalculatePoints() {
+      // reset points
+      this.players.forEach(p => {
+        p.points = 0;
+        p.matches = 0;
+        p.bye = 0;
+      });
+
+      this.rounds.forEach(round => {
+        round.matches.forEach(match => {
+          const { team1, team2, winner } = match;
+
+          // calculate "real" Matches
+          if (team2) {
+            const winnerTeam = match[winner];
+            const loserTeam = match[winner === 'team1' ? 'team2' : 'team1'];
+
+            if (winnerTeam) {
+              Object.values(winnerTeam).filter(Boolean).forEach(pid => {
+                const p = this.players.find(pl => pl.id === pid);
+                if (p) {
+                  p.points++;
+                  p.matches++;
+                }
+              });
+            }
+            if (loserTeam) {
+              Object.values(loserTeam).filter(Boolean).forEach(pid => {
+                const p = this.players.find(pl => pl.id === pid);
+                if (p) p.matches++;
+              });
+            }
+          }
+
+          // calculate "Bye" Matches
+          if (!team2) {
+            Object.values(team1).filter(Boolean).forEach(pid => {
+              const p = this.players.find(pl => pl.id === pid);
+              if (p) p.bye++;
+            });
+          }
+        });
+      });
+    },
+
+    get playersSorted() {
+      return [...this.players].sort((a, b) => b.points - a.points || b.matches - a.matches);
+    }
+  }));
+});
+</script>
+
+
+</body>
+</html>
